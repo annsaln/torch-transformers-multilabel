@@ -2,16 +2,14 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=64G
+#SBATCH --mem=10G
 #SBATCH -p gpu
-#SBATCH -t 00:30:00
+#SBATCH -t 01:15:00
 #SBATCH --gres=gpu:v100:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --account=Project_2002026
 #SBATCH -o logs/%j.out
 #SBATCH -e logs/%j.err
-
-# alkup. t 16:15:00 ja p gpu, debugmode p gputest ja t 00:15:00
 
 echo "START: $(date)"
 
@@ -30,7 +28,11 @@ pip3 install transformers
 #pip3 install datasets
 
 MODEL="xlm-roberta-base"
-MODEL_ALIAS="xlmr"
+#MODEL="xlm-roberta-large"
+#MODEL="TurkuNLP/bert-base-finnish-cased-v1"
+#MODEL="KB/bert-base-swedish-cased"
+#MODEL="camembert-base"
+MODEL_ALIAS="xlmr-base"
 SRC=$1
 TRG=$2
 LR_=$3
@@ -55,6 +57,7 @@ mkdir -p "$OUTPUT_DIR"
 for EPOCHS in $EPOCHS_; do
 for LR in $LR_; do
 for j in $i; do
+#rm -r checkpoints/$MODEL_ALIAS-$SRC-$TRG-$LR/
 echo "Settings: src=$SRC trg=$TRG model=$MODEL lr=$LR epochs=$EPOCHS batch_size=$BS"
 echo "job=$SLURM_JOBID src=$SRC trg=$TRG model=$MODEL lr=$LR epochs=$EPOCHS batch_size=$BS" >> logs/experiments.log
 srun python train.py \
@@ -65,8 +68,13 @@ srun python train.py \
   --lr $LR \
   --epochs $EPOCHS \
   --batch_size $BS \
-  --labels full 
+  --checkpoints checkpoints/$MODEL_ALIAS-$SRC-$TRG-$LR \
+  --labels full #\
+#  --save_model models/$MODEL_ALIAS-$SRC-$TRG.pt
 # --threshold 0.4
+
+#rm -r checkpoints/$MODEL_ALIAS-$SRC-$TRG-$LR/
+
 done
 done
 done

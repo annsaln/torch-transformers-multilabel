@@ -18,9 +18,7 @@ LEARNING_RATE=1e-4
 BATCH_SIZE=8
 TRAIN_EPOCHS=2
 MODEL_NAME = 'xlm-roberta-base'
-MAX_DEVIANCE = 0.005
 PATIENCE = 5
-THRESHOLD = 0.4
 
 labels_full = ['HI', 'ID', 'IN', 'IP', 'LY', 'NA', 'OP', 'SP', 'av', 'ds', 'dtp', 'ed', 'en', 'fi', 'it', 'lt', 'nb', 'ne', 'ob', 'ra', 're', 'rs', 'rv', 'sr']
 labels_upper = ['HI', 'ID', 'IN', 'IP', 'LY', 'NA', 'OP', 'SP']
@@ -44,13 +42,14 @@ def argparser():
                     default=LEARNING_RATE, help='Learning rate')
     ap.add_argument('--patience', metavar='INT', type=int,
                     default=PATIENCE, help='Early stopping patience')
-    ap.add_argument('--checkpoints', default=None, metavar='FILE',
+    ap.add_argument('--checkpoints', default='checkpoints', metavar='FILE',
                     help='Save model checkpoints to directory')
     ap.add_argument('--save_model', default=None, metavar='FILE',
                     help='Save model to file')
     ap.add_argument('--threshold', default=None, metavar='FLOAT', type=float,
                     help='threshold for calculating f-score')
     ap.add_argument('--labels', choices=['full', 'upper'], default='full')
+
     #ap.add_argument('--save_predictions', default=False, action='store_true',
     #                help='save predictions and labels for dev set, or for test set if provided')
     return ap
@@ -99,6 +98,7 @@ sub_register_map = {
     'IP': 'IP',
     'DS': 'ds',
     'EB': 'ed',
+    'ED': 'ed',
     'LY': 'LY',
     'PO': 'LY',
     'SO': 'LY',
@@ -106,9 +106,31 @@ sub_register_map = {
     'IT': 'it',
     'FS': 'SP',
     'TV': 'SP',
-    'OS': 'MT',
+    'OS': 'OS',
     'IG': 'IP',
-    'MT': 'MT'
+    'MT': 'MT',
+    'HT': 'HI',
+    'FI': 'fi',
+    'OI': 'IN',
+    'TR': 'IN',
+    'AD': 'OP',
+    'LE': 'OP',
+    'OO': 'OP',
+    'MA': 'NA',
+    'ON': 'NA',
+    'SS': 'NA',
+    'OE': 'IP',
+    'PA': 'IP',
+    'OF': 'ID',
+    'RR': 'ID',
+    'FH': 'HI',
+    'OH': 'HI',
+    'TS': 'HI',
+    'OL': 'LY',
+    'PR': 'LY',
+    'SL': 'LY',
+    'TA': 'SP',
+    'OTHER': 'OS'
 }
 
 def remove_NA(d):
@@ -169,6 +191,7 @@ def tokenize(example):
 # Apply the tokenizer to the whole dataset using .map()
 dataset = dataset.map(tokenize)
 
+#set up a separated directory for caching
 model = transformers.AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels, cache_dir="cachedir/")
 
 class MultilabelTrainer(transformers.Trainer):
@@ -187,7 +210,7 @@ print("Batch size: ", options.batch_size)
 print("Epochs: ", options.epochs)
 
 trainer_args = transformers.TrainingArguments(
-    "checkpoints",
+    options.checkpoints,
     evaluation_strategy="epoch",
     save_strategy='epoch',
     logging_strategy="epoch",
@@ -215,6 +238,7 @@ def optimize_threshold(predictions, labels):
     sigmoid = torch.nn.Sigmoid()
     probs = sigmoid(torch.Tensor(predictions))
     best_f1 = 0
+    best_f1_threshold = 0.5 # use 0.5 as a default threshold
     y_true = labels
     for th in np.arange(0.3, 0.7, 0.05):
         y_pred = np.zeros(probs.shape)
@@ -308,9 +332,10 @@ probs = sigmoid(torch.Tensor(predictions))
 preds = np.zeros(probs.shape)
 preds[np.where(probs >= threshold)] = 1
 
+# if you want to check the predictions
 #for t, p in zip(trues, preds):
-#  print("true", [labels[idx] for idx, label in enumerate(t) if label > 0.5])
-#  print("pred", [labels[idx] for idx, label in enumerate(p) if label > 0.5])
+#  print("true", [labels[idx] for idx, label in enumerate(t) if label == 1])
+#  print("pred", [labels[idx] for idx, label in enumerate(p) if label >= threshold])
 print(classification_report(trues, preds, target_names=labels))
 
 if options.save_model is not None:
