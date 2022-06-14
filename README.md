@@ -8,7 +8,7 @@ To train a model, run
   
 With the slurm script, you can launch multiple instances:
 
-    sbatch slurm_train_arg.sh [TRAIN_DATA] [TEST_DATA] [LRs] [EPOCHSs] [INSTANCEs]
+    sbatch slurm_train_arg.sh [TRAIN_LANGUAGE] [TEST_LANGUAGE] [LRs] [EPOCHSs] [INSTANCEs]
 
 List of registers and their abbreviations (used as labels):
 
