@@ -16,7 +16,7 @@ List of registers and their abbreviations (used as labels):
 |------------------------------------|--------------|
 | How-to                             | HI           |
 | Interactive Discussion             | ID           |
-| Informational                      | IN           |
+| Informative                      | IN           |
 | Informational Persuasion           | IP           |
 | Lyrical                            | LY           |
 | Narrative                          | NA           |
