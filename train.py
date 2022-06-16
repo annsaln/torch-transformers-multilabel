@@ -27,11 +27,11 @@ def argparser():
     ap = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
     ap.add_argument('--model_name', default=MODEL_NAME,
                     help='Pretrained model name')
-    ap.add_argument('--train', metavar='FILE', required=True,
+    ap.add_argument('--train', required=True,
                     help='Path to training data')
-    ap.add_argument('--dev', metavar='FILE', required=True,
+    ap.add_argument('--dev', required=True,
                     help='Path to validation data')
-    ap.add_argument('--test', metavar='FILE', required=True,
+    ap.add_argument('--test', required=True,
                     help='Path to test data')
     ap.add_argument('--batch_size', metavar='INT', type=int,
                     default=BATCH_SIZE,
@@ -156,9 +156,18 @@ def binarize(dataset):
     dataset = dataset.map(lambda line: {'label': mlb.transform([line['label']])[0]})
     return dataset
 
+data_files = {'train': [], 'dev':[], 'test':[]}
+
+
+for l in options.train.split('-'):
+    data_files['train'].append(f'data/{l}/train.tsv')
+    data_files['dev'].append(f'data/{l}/dev.tsv')
+for l in options.test.split('-'):
+        data_files['test'].append(f'data/{l}/test.tsv')
+
 dataset = datasets.load_dataset(
     "csv", 
-    data_files={'train':options.train, 'test':options.test, 'dev': options.dev}, 
+    data_files=data_files, #{'train':options.train, 'test':options.test, 'dev': options.dev}, 
     delimiter="\t",
     column_names=['label', 'text'],
     features=datasets.Features({    # Here we tell how to interpret the attributes
@@ -167,6 +176,7 @@ dataset = datasets.load_dataset(
       "label":datasets.Value("string")}),
     cache_dir = "cachedir"
     )
+dataset = dataset.shuffle(seed=42)
 
 #smaller tests
 #dataset["train"]=dataset["train"].select(range(400))

@@ -2,9 +2,9 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=10G
+#SBATCH --mem=32G
 #SBATCH -p gpu
-#SBATCH -t 01:15:00
+#SBATCH -t 02:15:00
 #SBATCH --gres=gpu:v100:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --account=Project_2002026
@@ -62,22 +62,24 @@ echo "Settings: src=$SRC trg=$TRG model=$MODEL lr=$LR epochs=$EPOCHS batch_size=
 echo "job=$SLURM_JOBID src=$SRC trg=$TRG model=$MODEL lr=$LR epochs=$EPOCHS batch_size=$BS" >> logs/experiments.log
 srun python train.py \
   --model_name $MODEL \
-  --train $TRAIN_DIR/train.tsv \
-  --dev $TRAIN_DIR/dev.tsv \
-  --test $TEST_DIR/test.tsv \
+  --train $SRC \
+  --dev $SRC \
+  --test $TRG \
   --lr $LR \
   --epochs $EPOCHS \
   --batch_size $BS \
   --checkpoints checkpoints/$MODEL_ALIAS-$SRC-$TRG-$LR \
   --labels full #\
-#  --save_model models/$MODEL_ALIAS-$SRC-$TRG.pt
+#  --save_model models/$MODEL_ALIAS-$SRC.pt
 # --threshold 0.4
 
-#rm -r checkpoints/$MODEL_ALIAS-$SRC-$TRG-$LR/
+rm -r checkpoints/$MODEL_ALIAS-$SRC-$TRG-$LR/
 
 done
 done
 done
+
+#rm -r checkpoints/$MODEL_ALIAS-$SRC-$TRG-*
 
 echo "job=$SLURM_JOBID src=$SRC trg=$TRG model=$MODEL lr=$LR epochs=$EPOCHS batch_size=$BS" >> logs/completed.log
 
