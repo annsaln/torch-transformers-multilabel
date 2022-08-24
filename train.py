@@ -20,6 +20,9 @@ TRAIN_EPOCHS=2
 MODEL_NAME = 'xlm-roberta-base'
 PATIENCE = 5
 
+# omit av, ed, fi
+#labels_full = ['HI', 'ID', 'IN', 'IP', 'LY', 'NA', 'OP', 'SP', 'ds', 'dtp', 'en', 'it', 'lt', 'nb', 'ne', 'ob', 'ra', 're', 'rs', 'rv', 'sr']
+
 labels_full = ['HI', 'ID', 'IN', 'IP', 'LY', 'NA', 'OP', 'SP', 'av', 'ds', 'dtp', 'ed', 'en', 'fi', 'it', 'lt', 'nb', 'ne', 'ob', 'ra', 're', 'rs', 'rv', 'sr']
 labels_upper = ['HI', 'ID', 'IN', 'IP', 'LY', 'NA', 'OP', 'SP']
 
@@ -49,7 +52,9 @@ def argparser():
     ap.add_argument('--threshold', default=None, metavar='FLOAT', type=float,
                     help='threshold for calculating f-score')
     ap.add_argument('--labels', choices=['full', 'upper'], default='full')
-
+    ap.add_argument('--load_model', default=None, metavar='FILE',
+                    help='load existing model')
+    ap.add_argument('--class_weights', default=False, type=bool)
     #ap.add_argument('--save_predictions', default=False, action='store_true',
     #                help='save predictions and labels for dev set, or for test set if provided')
     return ap
@@ -130,7 +135,11 @@ sub_register_map = {
     'PR': 'LY',
     'SL': 'LY',
     'TA': 'SP',
-    'OTHER': 'OS'
+    'OTHER': 'OS',
+    '': '',
+#    'av': 'OP', # uncomment if you want to combine these into upper registers
+#    'ed': 'IP',
+#    'fi': 'IN'
 }
 
 def remove_NA(d):
@@ -143,7 +152,7 @@ def remove_NA(d):
 
 def label_encoding(d):
   """ Split the multi-labels """
-  d['label'] = np.array(d['label'].split(","))
+  d['label'] = d['label'].split(",")
   mapped = [sub_register_map[l] if l not in labels else l for l in d['label']]
   d['label'] = np.array(sorted(list(set(mapped))))
   return d
@@ -158,11 +167,19 @@ def binarize(dataset):
 
 data_files = {'train': [], 'dev':[], 'test':[]}
 
+# only train and test for these languages
+small_languages = ['ar', 'ca', 'es', 'fa', 'hi', 'id', 'jp', 'no', 'pt', 'tr', 'ur', 'zh']
 
+# choose data with all languages with option 'multi'
 for l in options.train.split('-'):
     data_files['train'].append(f'data/{l}/train.tsv')
-    data_files['dev'].append(f'data/{l}/dev.tsv')
+    if not (l == 'multi' or l in small_languages): 
+        data_files['dev'].append(f'data/{l}/dev.tsv')
 for l in options.test.split('-'):
+    # check if zero-shot for small languages, if yes then test with full data
+    if l in small_languages and not (l in options.train.split('-') or 'multi' in options.train.split('-')):
+        data_files['test'].append(f'data/{l}/{l}.tsv')
+    else:
         data_files['test'].append(f'data/{l}/test.tsv')
 
 dataset = datasets.load_dataset(
@@ -183,9 +200,31 @@ dataset = dataset.shuffle(seed=42)
 #dataset["dev"]=dataset["dev"].select(range(100))
 #pprint(dataset['test']['label'][:10])
 dataset = dataset.map(remove_NA)
+# remove examples that have more than four labels
+dataset = dataset.filter(lambda example: len(example['label'].split(','))<=4)
+dataset = dataset.filter(lambda example: 'MT' not in example['label'].split(',') and 'OS' not in example['label'].split(','))
 dataset = dataset.map(label_encoding)
+
+def compute_class_weights(dataset):
+    freqs = [0] * len(labels)
+    n_examples = len(dataset['train'])
+    for e in dataset['train']['label']:
+        for i in range(len(labels)):
+            if e[i] != 0:
+                freqs[i] += 1
+    weights = []
+    for i in range(len(labels)):#, label in enumerate(labels):
+        weights.append(n_examples/(len(labels)*freqs[i]))
+    print("weights:", weights)
+    class_weights = torch.FloatTensor(weights).cuda()
+    return class_weights
+
+#class_weights = compute_class_weights(dataset)
+    
 dataset = binarize(dataset)
 #pprint(dataset['test']['label'][:5])
+if options.class_weights is True:
+    class_weights = compute_class_weights(dataset)
 
 model_name = options.model_name #"xlm-roberta-base"
 tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
@@ -195,8 +234,39 @@ def tokenize(example):
         example["text"],
         truncation=True,
         max_length=512,
-      #  padding=True
+#        padding=True,
+#        return_tensors='pt'
     )
+
+# Apply the tokenizer to the whole dataset using .map()
+#dataset = dataset.map(tokenize)
+#print(dataset['test'][0])
+
+# evaluate only
+if options.load_model is not None:
+    model = torch.load(options.load_model)
+#    torch.device
+    model.to('cpu')
+    trues = dataset['test']['label']
+    inputs = dataset['test']['text']
+    pred_labels = []    
+    for index, i in enumerate(inputs):
+        tok = tokenizer(i, truncation=True, max_length=512, return_tensors='pt')
+        pred = model(**tok)
+        sigmoid = torch.nn.Sigmoid()
+        probs = sigmoid(torch.Tensor(pred.logits.detach().numpy()))
+        preds = np.zeros(probs.shape)
+        preds[np.where(probs >= options.threshold)] = 1
+        pred_labels.extend(preds)
+#        print("preds",[labels[idx] for idx, label in enumerate(preds.flatten()) if label >= options.threshold])
+#        print("trues",[labels[idx] for idx, label in enumerate(trues[index]) if label >= options.threshold])
+#        print(i)
+#    print(pred_labels)
+#    print(trues)
+    print("F1-score", f1_score(y_true=trues, y_pred=pred_labels, average='micro'))
+    print(classification_report(trues, pred_labels, target_names=labels))
+    sys.exit()
+    #return [labels[idx] for idx, label in enumerate(preds) if label >= options.threshold]
 
 # Apply the tokenizer to the whole dataset using .map()
 dataset = dataset.map(tokenize)
@@ -209,7 +279,10 @@ class MultilabelTrainer(transformers.Trainer):
         labels = inputs.pop("labels")
         outputs = model(**inputs)
         logits = outputs.logits
-        loss_fct = torch.nn.BCEWithLogitsLoss()
+        if options.class_weights == True:
+            loss_fct = torch.nn.BCEWithLogitsLoss(pos_weight = class_weights)
+        else:
+            loss_fct = torch.nn.BCEWithLogitsLoss()
         loss = loss_fct(logits.view(-1, self.model.config.num_labels),
                         labels.float().view(-1, self.model.config.num_labels))
         return (loss, outputs) if return_outputs else loss
@@ -343,9 +416,12 @@ preds = np.zeros(probs.shape)
 preds[np.where(probs >= threshold)] = 1
 
 # if you want to check the predictions
-#for t, p in zip(trues, preds):
+#for i, (t, p) in enumerate(zip(trues,preds)):
 #  print("true", [labels[idx] for idx, label in enumerate(t) if label == 1])
-#  print("pred", [labels[idx] for idx, label in enumerate(p) if label >= threshold])
+#  print("pred", [labels[idx] for idx, label in enumerate(p) if label > threshold])
+#  print(dataset['test']['text'][i])
+
+
 print(classification_report(trues, preds, target_names=labels))
 
 if options.save_model is not None:

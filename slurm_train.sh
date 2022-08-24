@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=32G
 #SBATCH -p gpu
-#SBATCH -t 02:15:00
+#SBATCH -t 01:15:00
 #SBATCH --gres=gpu:v100:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --account=Project_2002026
@@ -20,11 +20,11 @@ ln -s $SLURM_JOBID.out logs/current.out
 
 module purge
 module load pytorch
-source venv/bin/activate
-export PYTHONPATH=venv/lib/python3.8/site-packages:$PYTHONPATH
+#source venv/bin/activate
+#export PYTHONPATH=venv/lib/python3.8/site-packages:$PYTHONPATH
 export TRANSFORMERS_CACHE=cachedir
-pip3 install --upgrade pip
-pip3 install transformers
+#pip3 install --upgrade pip
+#pip3 install transformers
 #pip3 install datasets
 
 MODEL="xlm-roberta-base"
@@ -69,7 +69,8 @@ srun python train.py \
   --epochs $EPOCHS \
   --batch_size $BS \
   --checkpoints checkpoints/$MODEL_ALIAS-$SRC-$TRG-$LR \
-  --labels full #\
+  --labels full \
+  --class_weights True #\
 #  --save_model models/$MODEL_ALIAS-$SRC.pt
 # --threshold 0.4
 
